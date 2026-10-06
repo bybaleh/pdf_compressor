@@ -1,0 +1,14 @@
+.git
+.github
+.gitignore
+.venv
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pdf
+tests/
+docs/
+README.md
+LICENSE
+Makefile
+*.md

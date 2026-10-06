@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest
+      - run: python -m pytest
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Собрать образ
+        run: docker build -t pdfshrink:ci .
+      - name: Проверить, что CLI отвечает
+        run: docker run --rm pdfshrink:ci --version
+      - name: Сжать тестовый PDF (создаётся Ghostscript'ом)
+        run: |
+          mkdir -p sample
+          docker run --rm --entrypoint gs -v "$PWD/sample:/data" pdfshrink:ci \
+            -sDEVICE=pdfwrite -o /data/sample.pdf \
+            -c "/Helvetica findfont 24 scalefont setfont 72 700 moveto (pdfshrink CI) show showpage"
+          docker run --rm -v "$PWD/sample:/data" pdfshrink:ci sample.pdf -v -t 1MB
+          test -f sample/sample_compressed.pdf
