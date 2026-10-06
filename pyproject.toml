@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pdfshrink"
+version = "1.0.0"
+description = "CLI для сжатия PDF до заданного размера (по умолчанию 10 МБ) через Ghostscript"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = []
+
+[project.scripts]
+pdfshrink = "pdfshrink.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[tool.setuptools]
+packages = ["pdfshrink"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

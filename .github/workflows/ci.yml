@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest
+      - run: python -m pytest
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Собрать образ
+        run: docker build -t pdfshrink:ci .
+
+      - name: CLI отвечает
+        run: docker run --rm pdfshrink:ci --version
+
+      - name: Сгенерировать тестовый PDF (40 страниц векторной графики)
+        run: |
+          mkdir -p sample
+          cat > sample/gen.ps <<'PS'
+          1 1 40 {
+            pop
+            0 1 600 {
+              /i exch def
+              i 0.9 mul 20 add 40 moveto
+              0 760 rlineto
+              i 97 mod 97 div  i 53 mod 53 div  0.4 setrgbcolor
+              0.35 setlinewidth stroke
+            } for
+            showpage
+          } for
+          PS
+          docker run --rm --entrypoint gs -v "$PWD/sample:/data" pdfshrink:ci \
+            -sDEVICE=pdfwrite -dBATCH -dNOPAUSE -o /data/sample.pdf /data/gen.ps
+          ls -l sample/sample.pdf
+
+      - name: Сжатие в целевой размер работает (цель заведомо достижима)
+        run: |
+          docker run --rm -v "$PWD/sample:/data" pdfshrink:ci sample.pdf -v -t 10MB
+          test -f sample/sample_compressed.pdf
+
+      - name: Реально запускается лестница профилей Ghostscript
+        run: |
+          docker run --rm -v "$PWD/sample:/data" pdfshrink:ci \
+            sample.pdf --force -t 20k --json > result.json || true
+          cat result.json
+          python3 - <<'PY'
+          import json
+          data = json.load(open("result.json"))
+          assert not data["errors"], data["errors"]
+          r = data["results"][0]
+          # lossless + минимум 3 запуска Ghostscript из бинарного поиска
+          assert r["attempts"] >= 3, r
+          assert r["final_size"] < r["original_size"], r
+          print("OK:", r["profile"], r["attempts"], "попыток")
+          PY
+
+      - name: Права на файлы при запуске от обычного пользователя
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/sample:/data" \
+            pdfshrink:ci sample.pdf -o user-owned.pdf -f
+          test -O sample/user-owned.pdf
